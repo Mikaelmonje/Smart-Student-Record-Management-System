@@ -1,0 +1,514 @@
+# ============================================================
+# SMART STUDENT RECORD MANAGEMENT SYSTEM
+# Final College Python Project
+# ============================================================
+
+import sqlite3
+import hashlib
+import os
+from datetime import datetime
+
+DATABASE = "student_system.db"
+
+
+# ============================================================
+# DATABASE FUNCTIONS
+# ============================================================
+
+def connect_db():
+    return sqlite3.connect(DATABASE)
+
+
+def create_tables():
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    # Users table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )
+    """)
+
+    # Students table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            course TEXT NOT NULL,
+            year_level TEXT NOT NULL,
+            grade REAL NOT NULL,
+            date_added TEXT NOT NULL
+        )
+    """)
+
+    # Create default admin account
+    password = hashlib.sha256("admin123".encode()).hexdigest()
+
+    cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password)
+        VALUES (?, ?)
+    """, ("admin", password))
+
+    conn.commit()
+    conn.close()
+
+
+# ============================================================
+# UTILITY FUNCTIONS
+# ============================================================
+
+def clear_screen():
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def pause():
+    input("\nPress ENTER to continue...")
+
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def get_remark(grade):
+    if grade >= 90:
+        return "Excellent"
+    elif grade >= 85:
+        return "Very Good"
+    elif grade >= 80:
+        return "Good"
+    elif grade >= 75:
+        return "Passed"
+    else:
+        return "Failed"
+
+
+# ============================================================
+# LOGIN SYSTEM
+# ============================================================
+
+def login():
+    while True:
+        clear_screen()
+
+        print("=" * 55)
+        print("     SMART STUDENT RECORD MANAGEMENT SYSTEM")
+        print("=" * 55)
+
+        username = input("\nUsername: ")
+        password = input("Password: ")
+
+        hashed_password = hash_password(password)
+
+        conn = connect_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM users
+            WHERE username = ? AND password = ?
+        """, (username, hashed_password))
+
+        user = cursor.fetchone()
+        conn.close()
+
+        if user:
+            print("\nLogin successful!")
+            pause()
+            return True
+        else:
+            print("\nInvalid username or password.")
+            print("Please try again.")
+            pause()
+
+
+# ============================================================
+# ADD STUDENT
+# ============================================================
+
+def add_student():
+    clear_screen()
+
+    print("=" * 45)
+    print("           ADD NEW STUDENT")
+    print("=" * 45)
+
+    student_id = input("\nStudent ID: ")
+    name = input("Full Name: ")
+    course = input("Course: ")
+    year_level = input("Year Level: ")
+
+    try:
+        grade = float(input("Final Grade: "))
+
+        if grade < 0 or grade > 100:
+            print("\nGrade must be between 0 and 100.")
+            pause()
+            return
+
+    except ValueError:
+        print("\nInvalid grade input.")
+        pause()
+        return
+
+    date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            INSERT INTO students
+            (student_id, name, course, year_level, grade, date_added)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            student_id,
+            name,
+            course,
+            year_level,
+            grade,
+            date_added
+        ))
+
+        conn.commit()
+
+        print("\nStudent added successfully!")
+
+    except sqlite3.IntegrityError:
+        print("\nStudent ID already exists!")
+
+    conn.close()
+    pause()
+
+
+# ============================================================
+# VIEW STUDENTS
+# ============================================================
+
+def view_students():
+    clear_screen()
+
+    print("=" * 95)
+    print("                         STUDENT RECORDS")
+    print("=" * 95)
+
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM students ORDER BY name")
+    students = cursor.fetchall()
+
+    conn.close()
+
+    if not students:
+        print("\nNo student records found.")
+    else:
+        print(
+            f"{'ID':<5}"
+            f"{'Student ID':<15}"
+            f"{'Name':<25}"
+            f"{'Course':<15}"
+            f"{'Year':<10}"
+            f"{'Grade':<10}"
+            f"{'Remark'}"
+        )
+
+        print("-" * 95)
+
+        for student in students:
+            remark = get_remark(student[5])
+
+            print(
+                f"{student[0]:<5}"
+                f"{student[1]:<15}"
+                f"{student[2]:<25}"
+                f"{student[3]:<15}"
+                f"{student[4]:<10}"
+                f"{student[5]:<10.2f}"
+                f"{remark}"
+            )
+
+    pause()
+
+
+# ============================================================
+# SEARCH STUDENT
+# ============================================================
+
+def search_student():
+    clear_screen()
+
+    print("=" * 45)
+    print("           SEARCH STUDENT")
+    print("=" * 45)
+
+    keyword = input("\nEnter Student ID or Name: ")
+
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM students
+        WHERE student_id LIKE ?
+        OR name LIKE ?
+    """, (f"%{keyword}%", f"%{keyword}%"))
+
+    results = cursor.fetchall()
+    conn.close()
+
+    if not results:
+        print("\nNo student found.")
+
+    else:
+        print("\nSEARCH RESULTS")
+        print("-" * 70)
+
+        for student in results:
+            print(f"\nDatabase ID: {student[0]}")
+            print(f"Student ID: {student[1]}")
+            print(f"Name: {student[2]}")
+            print(f"Course: {student[3]}")
+            print(f"Year Level: {student[4]}")
+            print(f"Grade: {student[5]}")
+            print(f"Remark: {get_remark(student[5])}")
+
+    pause()
+
+
+# ============================================================
+# UPDATE STUDENT
+# ============================================================
+
+def update_student():
+    clear_screen()
+
+    print("=" * 45)
+    print("           UPDATE STUDENT")
+    print("=" * 45)
+
+    student_id = input("\nEnter Student ID: ")
+
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM students
+        WHERE student_id = ?
+    """, (student_id,))
+
+    student = cursor.fetchone()
+
+    if not student:
+        print("\nStudent not found.")
+        conn.close()
+        pause()
+        return
+
+    print("\nLeave blank to keep the current value.")
+
+    new_name = input(f"Name ({student[2]}): ")
+    new_course = input(f"Course ({student[3]}): ")
+    new_year = input(f"Year Level ({student[4]}): ")
+    new_grade = input(f"Grade ({student[5]}): ")
+
+    if new_name == "":
+        new_name = student[2]
+
+    if new_course == "":
+        new_course = student[3]
+
+    if new_year == "":
+        new_year = student[4]
+
+    if new_grade == "":
+        new_grade = student[5]
+    else:
+        try:
+            new_grade = float(new_grade)
+
+            if new_grade < 0 or new_grade > 100:
+                print("\nInvalid grade.")
+                conn.close()
+                pause()
+                return
+
+        except ValueError:
+            print("\nInvalid grade input.")
+            conn.close()
+            pause()
+            return
+
+    cursor.execute("""
+        UPDATE students
+        SET name = ?,
+            course = ?,
+            year_level = ?,
+            grade = ?
+        WHERE student_id = ?
+    """, (
+        new_name,
+        new_course,
+        new_year,
+        new_grade,
+        student_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    print("\nStudent record updated successfully!")
+    pause()
+
+
+# ============================================================
+# DELETE STUDENT
+# ============================================================
+
+def delete_student():
+    clear_screen()
+
+    print("=" * 45)
+    print("           DELETE STUDENT")
+    print("=" * 45)
+
+    student_id = input("\nEnter Student ID: ")
+
+    confirm = input(
+        "Are you sure you want to delete this student? (yes/no): "
+    ).lower()
+
+    if confirm != "yes":
+        print("\nDelete operation cancelled.")
+        pause()
+        return
+
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM students
+        WHERE student_id = ?
+    """, (student_id,))
+
+    conn.commit()
+
+    if cursor.rowcount > 0:
+        print("\nStudent deleted successfully!")
+    else:
+        print("\nStudent not found.")
+
+    conn.close()
+    pause()
+
+
+# ============================================================
+# SYSTEM STATISTICS
+# ============================================================
+
+def statistics():
+    clear_screen()
+
+    print("=" * 45)
+    print("           SYSTEM STATISTICS")
+    print("=" * 45)
+
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM students")
+    total = cursor.fetchone()[0]
+
+    cursor.execute("SELECT AVG(grade) FROM students")
+    average = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM students
+        WHERE grade >= 75
+    """)
+    passed = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM students
+        WHERE grade < 75
+    """)
+    failed = cursor.fetchone()[0]
+
+    conn.close()
+
+    print(f"\nTotal Students: {total}")
+
+    if average is not None:
+        print(f"Average Grade: {average:.2f}")
+    else:
+        print("Average Grade: No data")
+
+    print(f"Passed Students: {passed}")
+    print(f"Failed Students: {failed}")
+
+    pause()
+
+
+# ============================================================
+# MAIN MENU
+# ============================================================
+
+def main_menu():
+
+    while True:
+        clear_screen()
+
+        print("=" * 55)
+        print("     SMART STUDENT RECORD MANAGEMENT SYSTEM")
+        print("=" * 55)
+
+        print("\n[1] Add Student")
+        print("[2] View All Students")
+        print("[3] Search Student")
+        print("[4] Update Student")
+        print("[5] Delete Student")
+        print("[6] System Statistics")
+        print("[7] Logout / Exit")
+
+        choice = input("\nChoose an option: ")
+
+        if choice == "1":
+            add_student()
+
+        elif choice == "2":
+            view_students()
+
+        elif choice == "3":
+            search_student()
+
+        elif choice == "4":
+            update_student()
+
+        elif choice == "5":
+            delete_student()
+
+        elif choice == "6":
+            statistics()
+
+        elif choice == "7":
+            print("\nThank you for using the system!")
+            break
+
+        else:
+            print("\nInvalid choice!")
+            pause()
+
+
+# ============================================================
+# START PROGRAM
+# ============================================================
+
+if __name__ == "__main__":
+
+    create_tables()
+
+    if login():
+        main_menu()
